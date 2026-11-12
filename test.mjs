@@ -28,6 +28,8 @@ r = await call('search', { query: 'higgsfield', kind: 'web' });
 check('search web: higgsfield', !r.err && /Sunwarden|Iron Bamboo|Saltfire/.test(r.t), r.t.split('\n')[0]);
 r = await call('search', { query: 'impact pause' });
 check('natural words find hit-stop first', !r.err && r.t.split('\n')[1]?.includes('hit-stop'), r.t.split('\n')[1]);
+r = await call('search', { query: 'a mechanic that pauses the action on impact' });
+check('long query: hit-stop first, short tail', !r.err && r.t.split('\n')[1]?.includes('hit-stop') && r.t.split('\n').filter(l => l.startsWith('- ')).length <= 6, r.t.split('\n')[0]);
 r = await call('search', { query: 'juice for my platformer jump', kind: 'mechanics' });
 check('natural words find platformer controller', !r.err && r.t.includes('platformer-controller'));
 r = await call('search', { query: 'zzzz-nothing' });

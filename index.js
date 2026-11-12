@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 const API = (process.env.PLAYBOOK_API || 'https://rexgu9911.github.io/playbook/api').replace(/\/+$/, '');
 const TTL = 10 * 60 * 1000;
 const MAX_SOURCE = 200_000;
@@ -90,7 +90,9 @@ server.registerTool('search', {
   annotations: { readOnlyHint: true, openWorldHint: true },
 }, async ({ query, kind, limit }) => {
   try {
-    const ws = words(query);
+    // "a mechanic that...", "game feel for..." → the user wants a mechanic, not games tagged with those words
+    if (kind === 'all' && /\bmechanics?\b|\bgame[- ]?feel\b/i.test(query)) kind = 'mechanics';
+    const ws = words(query).filter(w => !/^mechanics?$/.test(w));
     const out = [];
     if (kind === 'all' || kind === 'recipes') {
       for (const r of await api('recipes')) {
@@ -111,6 +113,10 @@ server.registerTool('search', {
       }
     }
     out.sort((a, b) => b.s - a.s);
+    if (out.length && ws.length > 1) {
+      const floor = Math.max(1, out[0].s * 0.4);
+      for (let k = out.length - 1; k >= 0; k--) if (out[k].s < floor) out.splice(k, 1);
+    }
     if (!out.length) return text(`No matches for "${query}". Try a genre (racing, shooter, puzzle), an engine (three.js), or a feel ("hit stop").`);
     const shown = out.slice(0, limit);
     return text(`${out.length} match${out.length > 1 ? 'es' : ''}${out.length > limit ? `, showing ${limit}` : ''}:\n${shown.map(x => x.line).join('\n')}\n\n` +
@@ -146,7 +152,7 @@ server.registerTool('get_recipe', {
       `**Sound:** ${r.sound}`,
       `**Controls:** ${r.controls}`,
       '',
-      `Play: ${r.play_url}\nPage: ${r.page_url}\nSource: ${r.source_url}${r.theme_param ? ` (this version is \`?${r.theme_param}\`)` : ''}`,
+      `Play: ${r.play_url}\nPage: ${r.page_url}\nSource (raw): ${r.source_raw || r.source_url}${r.theme_param ? ` (this version is \`?${r.theme_param}\`)` : ''}`,
       remixes.length ? `\n**Other versions:** ${remixes.join(' · ')}` : '',
       '',
       '**How to remake it**: keep the mechanics and the feel (timings, juice), change the theme, palette, hero and sound to the user\'s idea. ' +
@@ -180,10 +186,12 @@ server.registerTool('get_mechanic', {
       '',
       `Works with: ${m.works_with.join(', ')} · license ${m.license}`,
       m.used_by.length ? `Used in recipes: ${m.used_by.join(', ')}` : '',
-      `Live demo: ${m.demo_url}\nSource: ${m.source_url}`,
+      `Live demo: ${m.demo_url}\nSource (raw): ${m.source_raw || m.source_url}`,
       '',
       '**How to add it**: find the user\'s game loop and the event that should trigger it, port only the relevant logic and constants from the reference ' +
-      '(not the demo scaffolding), keep the timings, and expose the key numbers as named constants so they can be tuned.',
+      '(not the demo scaffolding), keep the timings, and expose the key numbers as named constants so they can be tuned. ' +
+      'Check the draw code as well as the update code: visual states (flashes, holds, jitter) are often decided at render time. ' +
+      'The prompt above states the intended behaviour and timings; if it and the reference ever disagree, follow the prompt.',
       src ? `\n**Reference implementation**\n\`\`\`html\n${src}\n\`\`\`` : '',
     ].filter(x => x !== '').join('\n'));
   } catch (e) { return fail(`Could not load mechanic "${slug}": ${e.message}`); }

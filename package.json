@@ -1,0 +1,36 @@
+{
+  "name": "playbook-mcp",
+  "version": "0.1.0",
+  "main": "index.js",
+  "keywords": [
+    "mcp",
+    "games",
+    "game-dev",
+    "claude",
+    "cursor",
+    "threejs"
+  ],
+  "license": "MIT",
+  "description": "Playbook MCP: search AI-made web games and pull open game recipes and game-feel mechanics into Claude Code, Cursor or Codex.",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "type": "module",
+  "bin": {
+    "playbook-mcp": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rexgu9911/playbook-mcp.git"
+  },
+  "homepage": "https://rexgu9911.github.io/playbook/"
+}

@@ -5,34 +5,65 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 const API = (process.env.PLAYBOOK_API || 'https://rexgu9911.github.io/playbook/api').replace(/\/+$/, '');
 const TTL = 10 * 60 * 1000;
 const MAX_SOURCE = 200_000;
 const cache = new Map();
 
-async function fetchText(url) {
+const TIMEOUT = 15_000;
+async function fetchOne(url) {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.t < TTL) return hit.v;
-  const res = await fetch(url, { headers: { 'user-agent': `playbook-mcp/${VERSION}` } });
-  if (!res.ok) throw new Error(`${url} returned HTTP ${res.status}`);
+  const res = await fetch(url, { headers: { 'user-agent': `playbook-mcp/${VERSION}` }, signal: AbortSignal.timeout(TIMEOUT) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const v = await res.text();
   cache.set(url, { t: Date.now(), v });
   return v;
 }
+// Try each URL in order; some networks stall on one host (seen with raw.githubusercontent.com from Node).
+async function fetchText(...urls) {
+  const errors = [];
+  for (const u of urls.flat().filter(Boolean)) {
+    try { return await fetchOne(u); } catch (e) { errors.push(`${u}: ${e.name === 'TimeoutError' ? 'timed out' : e.message}`); }
+  }
+  throw new Error(errors.join('; '));
+}
 const api = async name => JSON.parse(await fetchText(`${API}/${name}.json`));
 const isLocalApi = () => /^https?:\/\/(localhost|127\.0\.0\.1)/.test(API);
 // When pointed at a local site for testing, read sources from the same server instead of GitHub raw.
-const sourceUrl = u => (isLocalApi() ? u.replace('https://raw.githubusercontent.com/rexgu9911/playbook/main', API.replace(/\/api$/, '')) : u);
+const SITE = 'https://rexgu9911.github.io/playbook';
+const RAW = 'https://raw.githubusercontent.com/rexgu9911/playbook/main';
+const local = u => (isLocalApi() ? u.replace(SITE, API.replace(/\/api$/, '')).replace(RAW, API.replace(/\/api$/, '')) : u);
+// Source candidates: the site copy first (same host as the API), then GitHub raw.
+const sources = x => [x.source_url, x.source_raw, x.source_url && x.source_url.replace(RAW, SITE)].filter(Boolean).map(local);
 
 const text = t => ({ content: [{ type: 'text', text: t }] });
 const fail = t => ({ content: [{ type: 'text', text: t }], isError: true });
-const words = q => String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
-const score = (hay, ws) => {
-  const h = hay.toLowerCase();
+const STOP = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'in', 'on', 'with', 'my', 'me', 'i', 'it', 'is', 'that', 'some', 'add', 'make', 'want', 'like', 'game', 'games', 'please']);
+const words = q => String(q || '').toLowerCase().split(/[\s,.;:!?]+/).filter(w => w && !STOP.has(w));
+// Words people use for a feel → words our data uses.
+const SYN = {
+  pause: ['freeze', 'hit-stop', 'hitstop', 'stop'], freeze: ['hit-stop', 'freeze'], impact: ['impact', 'hit'], hitstop: ['hit-stop'],
+  juice: ['feel', 'shake', 'particle', 'flash'], feel: ['feel'], shake: ['shake', 'trauma'], screenshake: ['shake'], rumble: ['shake'],
+  jump: ['jump', 'platformer', 'coyote'], coyote: ['coyote'], platformer: ['platformer'], movement: ['movement', 'dash', 'jump'],
+  explosion: ['burst', 'particle', 'debris'], particles: ['particle', 'burst'], sparks: ['spark', 'burst'],
+  dash: ['dash'], trail: ['afterimage', 'trail'], camera: ['camera', 'follow'], follow: ['follow', 'camera'],
+  damage: ['damage', 'numbers'], numbers: ['numbers'], crit: ['crit'], loot: ['loot', 'chest', 'reveal'], chest: ['loot', 'capsule'],
+  upgrade: ['upgrade', 'level-up', 'cards'], levelup: ['level-up', 'upgrade'], perk: ['upgrade', 'cards'],
+  rope: ['grapple', 'rope'], swing: ['grapple', 'swing', 'pendulum'], grapple: ['grapple'],
+  fps: ['shooter', 'fps', 'first-person'], shooter: ['shooter', 'shoot'], race: ['racing', 'racer', 'drift'], racing: ['racing'], car: ['racing', 'drift', 'kart'],
+};
+const variants = w => [w, w.replace(/s$/, ''), ...(SYN[w] || []), ...(SYN[w.replace(/s$/, '')] || [])];
+// title/name hits weigh more; every matched query word counts; nothing matched → 0
+const score = (strong, weak, ws) => {
+  const a = strong.toLowerCase(), b = weak.toLowerCase();
   let s = 0;
-  for (const w of ws) { if (!h.includes(w)) return 0; s += h.split(w).length - 1; }
-  return s || 1;
+  for (const w of ws) {
+    const vs = variants(w);
+    if (vs.some(v => a.includes(v))) s += 3; else if (vs.some(v => b.includes(v))) s += 1;
+  }
+  return s;
 };
 const near = (list, key, q) => list.filter(x => x[key].toLowerCase().includes(String(q).toLowerCase().split('-')[0])).slice(0, 5).map(x => x[key]);
 const truncate = (s, n) => (s.length > n ? `${s.slice(0, n)}\n<!-- truncated: ${s.length - n} more characters at the source URL -->` : s);
@@ -63,19 +94,19 @@ server.registerTool('search', {
     const out = [];
     if (kind === 'all' || kind === 'recipes') {
       for (const r of await api('recipes')) {
-        const s = ws.length ? score([r.title, r.id, r.genres.join(' '), r.engine, r.art_direction, r.kind, r.mechanics.map(m => m.name).join(' ')].join(' '), ws) : 1;
+        const s = ws.length ? score([r.title, r.id, r.genres.join(' ')].join(' '), [r.engine, r.art_direction, r.kind, r.prompt, r.mechanics.map(m => `${m.name} ${m.slug}`).join(' ')].join(' '), ws) : 1;
         if (s) out.push({ s: s + (r.kind === 'original' ? 0.5 : 0), line: `- [recipe] **${r.title}** (id: \`${r.id}\`) · ${r.kind}${r.remix_of ? ` of ${r.remix_of}` : ''} · ${r.genres.join(', ')} · ${r.engine} · ${r.art_direction}` });
       }
     }
     if (kind === 'all' || kind === 'mechanics') {
       for (const m of await api('mechanics')) {
-        const s = ws.length ? score([m.name, m.slug, m.category, m.description].join(' '), ws) : 1;
-        if (s) out.push({ s: s + 0.4, line: `- [mechanic] **${m.name}** (slug: \`${m.slug}\`) · ${m.category} · ${m.description}` });
+        const s = ws.length ? score([m.name, m.slug, m.category].join(' '), [m.description, m.prompt].join(' '), ws) : 1;
+        if (s) out.push({ s: s + 0.6, line: `- [mechanic] **${m.name}** (slug: \`${m.slug}\`) · ${m.category} · ${m.description}` });
       }
     }
     if (kind === 'all' || kind === 'web') {
       for (const d of await api('discover')) {
-        const s = ws.length ? score([d.title, d.creator, d.genre, d.engine, d.model, d.platform, d.note, d.is3d ? '3d' : ''].join(' '), ws) : 1;
+        const s = ws.length ? score([d.title, d.genre].join(' '), [d.creator, d.engine, d.model, d.platform, d.note, d.is3d ? '3d' : ''].join(' '), ws) : 1;
         if (s) out.push({ s, line: `- [web] **${d.title}** by ${d.creator || 'unknown'} · ${[d.genre, d.engine, d.model].filter(Boolean).join(' · ')} · play: ${d.url} · shared: ${d.source} · ${d.note}` });
       }
     }
@@ -103,7 +134,7 @@ server.registerTool('get_recipe', {
     const parent = r.remix_of ? recipes.find(x => x.id === r.remix_of) : null;
     const remixes = recipes.filter(x => x.remix_of === (r.remix_of || r.id) && x.id !== r.id).map(x => `${x.title} (\`${x.id}\`): ${x.art_direction}`);
     let src = '';
-    if (include_source) src = truncate(await fetchText(sourceUrl(r.source_url)), MAX_SOURCE);
+    if (include_source) src = truncate(await fetchText(sources(r)), MAX_SOURCE);
     return text([
       `# ${r.title}  (\`${r.id}\`)`,
       `${r.kind === 'remix' ? `Remix of **${parent?.title || r.remix_of}**` : 'Original'} · ${r.genres.join(', ')} · ${r.engine} · ${r.files} HTML file · license ${r.license}`,
@@ -140,7 +171,7 @@ server.registerTool('get_mechanic', {
     const m = mechanics.find(x => x.slug === slug) || mechanics.find(x => x.name.toLowerCase() === String(slug).toLowerCase());
     if (!m) return fail(`No mechanic "${slug}". Available: ${mechanics.map(x => x.slug).join(', ')}.`);
     let src = '';
-    if (include_source) src = truncate(await fetchText(sourceUrl(m.source_url)), MAX_SOURCE);
+    if (include_source) src = truncate(await fetchText(sources(m)), MAX_SOURCE);
     return text([
       `# ${m.name}  (\`${m.slug}\`) · ${m.category}`,
       m.description,

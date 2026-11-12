@@ -11,19 +11,29 @@ No account, no API key. Node 18+.
 claude mcp add playbook -- npx -y github:rexgu9911/playbook-mcp
 ```
 
-**Cursor**: `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project)
+**Cursor**: `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project), then reload Cursor
 ```json
-{ "mcpServers": { "playbook": { "command": "npx", "args": ["-y", "github:rexgu9911/playbook-mcp"] } } }
+{ "mcpServers": { "playbook": { "type": "stdio", "command": "npx", "args": ["-y", "github:rexgu9911/playbook-mcp"] } } }
 ```
 
-**Codex**: `~/.codex/config.toml`
+**Codex**
+```bash
+codex mcp add playbook -- npx -y github:rexgu9911/playbook-mcp
+```
+or add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.playbook]
 command = "npx"
 args = ["-y", "github:rexgu9911/playbook-mcp"]
 ```
 
-**Claude Desktop**: Settings → Developer → Edit Config, add the same block as Cursor to `claude_desktop_config.json`, then restart.
+**Claude Desktop**: in the macOS menu bar, Claude → Settings… → Developer → Edit Config. Add this to `claude_desktop_config.json`, then quit and reopen Claude:
+```json
+{ "mcpServers": { "playbook": { "command": "npx", "args": ["-y", "github:rexgu9911/playbook-mcp"] } } }
+```
+
+## Verified with
+Claude Code 2.1 (`claude mcp list` shows it connected), Codex CLI 0.167 (`codex mcp add` / `codex mcp list`), and the official MCP SDK client (`test.mjs`, 16 checks). Cursor and Claude Desktop configs follow their official docs.
 
 ## Then ask
 

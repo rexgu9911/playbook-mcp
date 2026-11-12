@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 const API = (process.env.PLAYBOOK_API || 'https://rexgu9911.github.io/playbook/api').replace(/\/+$/, '');
 const TTL = 10 * 60 * 1000;
 const MAX_SOURCE = 200_000;
@@ -184,6 +184,7 @@ server.registerTool('get_mechanic', {
       '',
       `**Prompt**\n${m.prompt}`,
       '',
+      m.key_numbers?.length ? `**Key numbers** (tune these; same names as the constants in the reference where it defines them)\n${m.key_numbers.map(k => `- \`${k.name}\` = ${k.value}${k.unit ? ` ${k.unit}` : ''}: ${k.note}`).join('\n')}\n` : '',
       `Works with: ${m.works_with.join(', ')} · license ${m.license}`,
       m.used_by.length ? `Used in recipes: ${m.used_by.join(', ')}` : '',
       `Live demo: ${m.demo_url}\nSource (raw): ${m.source_raw || m.source_url}`,

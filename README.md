@@ -2,6 +2,8 @@
 
 Pull open game recipes and game-feel mechanics from [Playbook](https://rexgu9911.github.io/playbook/) into your own coding agent, and search the best AI-made web games for ideas.
 
+What's inside: 30 game-feel mechanics (movement, combat, camera, feedback, UI, audio, generation), each with a live demo, key numbers and a single-file reference; 18 open game recipes; and an index of about 80 AI-made web games, linked and credited.
+
 No account, no API key. Node 18+.
 
 ## Install
@@ -33,7 +35,7 @@ args = ["-y", "github:rexgu9911/playbook-mcp"]
 ```
 
 ## Verified with
-Claude Code 2.1 (`claude mcp list` shows it connected), Codex CLI 0.167 (`codex mcp add` / `codex mcp list`), and the official MCP SDK client (`test.mjs`, 16 checks). Cursor and Claude Desktop configs follow their official docs.
+Claude Code 2.1 (`claude mcp list` shows it connected), Codex CLI 0.167 (`codex mcp add` / `codex mcp list`), and the official MCP SDK client (`test.mjs`, 17 checks). Cursor and Claude Desktop configs follow their official docs.
 
 ## Then ask
 
@@ -47,7 +49,7 @@ Claude Code 2.1 (`claude mcp list` shows it connected), Codex CLI 0.167 (`codex 
 |---|---|
 | `search` | Recipes, mechanics and AI-made games from the web matching your words (`kind`: all / recipes / mechanics / web). |
 | `get_recipe` | A Playbook game's prompt, mechanics, art direction, palette, sound, controls, links, and (with `include_source`) its full single-file source. |
-| `get_mechanic` | A game-feel mechanic's prompt plus a small working reference implementation to adapt. |
+| `get_mechanic` | A game-feel mechanic's prompt, its key numbers (named, with units) and a small working reference implementation to adapt. |
 | `list` | Every recipe (by genre) or mechanic (by category). |
 
 There is also a `remake` prompt: pick a recipe id and a theme.
